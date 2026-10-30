@@ -42,8 +42,6 @@ async function init() {
       $('runBtn').disabled = true;
       banner(`Claude CLI "${health.claude.bin}" was not found on this machine's PATH, so the real feed is unavailable. `
         + 'Install the Claude CLI or start the server with CLAUDE_BIN=/path/to/claude. The office still accepts external feeds via POST /api/feed.', 'bad');
-    } else {
-      banner(`Connected to ${health.claude.path} · ${health.claude.version || 'version unknown'}. Avatars are driven by real stream-json events.`, 'ok');
     }
   } catch (err) {
     banner(`Could not reach the office server: ${err.message}`, 'bad');
