@@ -26,12 +26,15 @@ Requires Node 20+ and the `claude` CLI on PATH (or set `CLAUDE_BIN`). The server
 | Surface | What it shows |
 | --- | --- |
 | **Office floor** | Sessions that are running right now. One avatar per session, at a desk, with a speech bubble. |
-| **Dormitory** | The standby roster — every subagent and skill a session reported as available — sleeping in beds. A bed wakes up (`ON SHIFT`) when a session actually calls it. |
+| **Dormitory** | The standby roster — every subagent and skill available here — sleeping in beds. A bed wakes up (`ON SHIFT`) when a session actually calls it. |
 | **Workbench** (the `+`) | Your projects on disk, their branches, and what Claude reports about itself: who is signed in, which sessions are open, what this office measured. |
 
-The dorm is only populated after at least one real session reports its roster, because the
-list comes from the session's own `system/init` event rather than from scanning `~/.claude`.
-Scanning would pick up marketplace `.bak`/`.staging` copies the CLI never loads.
+The dorm is filled from the computer the office runs on. Before any session has spoken, it
+reads your own agents and skills (`~/.claude/agents`, `~/.claude/skills`) and this project's
+`.claude` folder — never a plugin marketplace's `.bak`/`.staging` copies, which the CLI does
+not load. The first real session to report its `system/init` roster replaces that scan with
+exactly what the session had available, and the cache in `data/inventory.json` stays on that
+machine.
 
 ---
 
@@ -307,7 +310,7 @@ public/dorm.js         Dormitory scene, beds, nameplate layout pass
 public/client.js       SSE client, crew cards, approval cards, Finished shelf, activity stream
 public/workbench.js    The + button and the page behind it: projects, branches, session & usage
 public/styles.css      Layout and the two-column HUD
-data/settings.json     The projects root you picked — the only path this app remembers
+data/*.json            Machine-local, git-ignored: roster cache, Finished shelf, projects root
 hooks/                 The bridge script and its installer
 ```
 
@@ -333,6 +336,9 @@ reached they slide sideways into the margin instead of overlapping.
   `claude` CLI's own existing login and never reads, prints, or stores credentials.
 - **Invented activity.** If a session has not reported something, the office shows
   `no plan yet` rather than guessing at progress.
+- **A tool count before a session reports one.** The installed roster is read from disk, which
+  knows agents and skills but not the tools a session will expose, so that number appears only
+  after a real session reports it.
 - **A quota or usage-limit bar.** Claude Code publishes no endpoint for "62% of your weekly
   limit used", so the workbench states its plan and its measured totals and leaves the limit
   out, rather than drawing a gauge that would have to be invented.
