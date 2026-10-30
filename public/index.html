@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent Office · live Claude floor</title>
+<link rel="stylesheet" href="./styles.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏢</text></svg>" />
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark"></span>
+      <div>
+        <h1>Agent Office</h1>
+        <p class="sub">a live room where your real Claude agents work</p>
+      </div>
+    </div>
+    <div class="topright">
+      <button id="needsYou" class="badge waiting" type="button" hidden>waiting on you</button>
+      <div id="feedBadge" class="badge neutral">connecting…</div>
+      <div id="conn" class="conn"><i></i><span>socket</span></div>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="grid">
+    <aside class="panel left">
+      <section class="card">
+        <h2>Send an agent to a desk</h2>
+        <form id="runForm">
+          <label for="prompt">What to ask for
+            <textarea id="prompt" rows="4" placeholder="e.g. Read this repo and tell me, in five bullets, how signing in works"></textarea>
+          </label>
+          <div class="promptbar">
+            <button type="button" class="mini" id="sharpenBtn">Make my ask clearer</button>
+            <span class="hintline" id="sharpenNote">what you want · how far to go · what the answer looks like</span>
+          </div>
+          <div class="row">
+            <label class="grow">Model
+              <input id="model" placeholder="default model" autocomplete="off" />
+            </label>
+            <label>Most steps it may take
+              <input id="turns" type="number" min="1" max="200" value="20" />
+            </label>
+          </div>
+          <div class="row">
+            <label class="grow">What it is allowed to do
+              <select id="mode">
+                <option value="plan">only look — it changes nothing (safest)</option>
+                <option value="default">ask before it writes or runs something</option>
+                <option value="acceptEdits">may change files without asking</option>
+                <option value="bypassPermissions">may do anything without asking (risky)</option>
+              </select>
+            </label>
+          </div>
+          <label class="switch" for="approveHere">
+            <input id="approveHere" type="checkbox" />
+            <span>Ask me here before anything that writes or runs a command</span>
+          </label>
+          <details class="adv">
+            <summary>More settings · which folder</summary>
+            <label for="cwd">Folder the agent runs inside
+              <input id="cwd" autocomplete="off" />
+            </label>
+          </details>
+          <button class="primary" type="submit" id="runBtn">Run agent</button>
+          <p class="hint">Runs <code>claude -p … --output-format stream-json</code> on this machine. Nothing leaves your localhost.</p>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="cardhead">
+          <h2>Crew <span id="crewCount" class="pill">0</span></h2>
+          <div class="mini">
+            <button id="fitBtn" title="refit camera (double-click canvas too)">Fit</button>
+          </div>
+        </div>
+        <ul id="roster" class="roster"></ul>
+        <p id="empty" class="empty">Nobody is in the room yet. Send an agent off to the right, or start one in VS Code or a terminal and it will walk in here.</p>
+        <footer class="totals" id="totals"></footer>
+      </section>
+
+      <section class="card legend">
+        <h2>What the colours mean</h2>
+        <ul>
+          <li><i style="background:#4DE1C1"></i> working — it is doing something right now</li>
+          <li><i style="background:#FFD166"></i> thinking — it is deciding what to do next</li>
+          <li><i style="background:#8AB4FF"></i> walking in — it just arrived at a desk</li>
+          <li><i style="background:#FF8FA3"></i> needs you — it stopped and is waiting for an answer</li>
+          <li><i style="background:#7CE4A8"></i> finished — it wrote its report</li>
+          <li><i style="background:#9aa7b8"></i> on a break — no news for a while, so it wandered to the cooler</li>
+        </ul>
+        <p class="hint"><b>Sprinting</b> means it did three or more things in four seconds. The bar under each name shows how far through <b>its own plan</b> it is. An agent that never wrote a plan has no percentage, so its bar keeps moving instead of guessing.</p>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <nav class="tabs">
+        <button id="tabOffice" class="tab on" data-room="office">Office floor <span id="tabOfficeN" class="pill">0</span></button>
+        <button id="tabDorm" class="tab" data-room="dorm">Dormitory <span id="tabDormN" class="pill">0</span></button>
+        <div class="tabtools" id="dormTools" hidden>
+          <div class="seg">
+            <button id="grpAgents" class="segbtn on">Agents</button>
+            <button id="grpSkills" class="segbtn">Skills</button>
+          </div>
+          <input id="dormSearch" placeholder="find a bed…" autocomplete="off" />
+        </div>
+      </nav>
+      <div class="stagebody">
+        <canvas id="office"></canvas>
+        <canvas id="dorm" hidden></canvas>
+      </div>
+      <div class="stagehint" id="stageHint">drag to pan · wheel to zoom · double-click to fit · click a person to inspect</div>
+    </section>
+
+    <aside class="panel right">
+      <section class="card asking" id="askCard" hidden>
+        <div class="cardhead">
+          <h2>Needs your answer <span id="askCount" class="pill">0</span></h2>
+          <button id="askAllDeny" class="mini">say no to all</button>
+        </div>
+        <p class="hint">It stopped and is waiting for you. If nobody answers here within
+          <b id="askWindow">50</b> seconds, it asks you in the terminal instead.</p>
+        <ul id="askList" class="asklist"></ul>
+      </section>
+      <section class="card detail" id="detail" hidden>
+        <div class="cardhead">
+          <h2 id="detailName">agent</h2>
+          <button id="detailClose" class="mini">close</button>
+        </div>
+        <p class="lede" id="detailLede"></p>
+        <dl id="detailStats"></dl>
+        <div id="detailExtra"></div>
+        <div class="subhead">what it did, step by step</div>
+        <pre id="detailLog" class="log"></pre>
+      </section>
+      <section class="card finished">
+        <div class="cardhead">
+          <h2>Finished <span id="finishedCount" class="pill">0</span></h2>
+          <button id="finishedToggle" class="mini">hide</button>
+        </div>
+        <ul id="finishedList" class="finlist"></ul>
+        <p id="finishedEmpty" class="empty">Nothing has finished yet. When a run ends — from this page, VS Code or a terminal — it is written here and stays after a reload.</p>
+      </section>
+      <section class="card grow">
+        <h2>What is happening, as it happens</h2>
+        <ul id="feed" class="feed"></ul>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div class="fabwrap" id="fabWrap">
+  <div class="fabmenu" id="fabMenu" hidden>
+    <button class="fabact" id="fabProjects" type="button"><i>📁</i><span>Work on a project</span></button>
+    <button class="fabact" id="fabSessions" type="button"><i>💬</i><span>Start or resume a session</span></button>
+    <button class="fabact" id="fabUsage" type="button"><i>📊</i><span>What Claude has cost</span></button>
+  </div>
+  <button class="fab" id="fab" type="button" aria-expanded="false" aria-haspopup="true" aria-label="Open the workbench">
+    <span class="fabi" id="fabi" aria-hidden="true">+</span>
+  </button>
+</div>
+
+<div class="sheet" id="workbench" hidden role="dialog" aria-modal="true" aria-labelledby="wbTitle">
+  <header class="wbhead">
+    <div class="wbtitle">
+      <h2 id="wbTitle">Everything your work needs</h2>
+      <p id="wbSub">Choose the folder your projects live in, open one, pick a branch, and send an agent in. Or read exactly what Claude is doing right now.</p>
+    </div>
+    <nav class="wbtabs">
+      <button class="tab on" id="wbTabProjects" type="button">Projects</button>
+      <button class="tab" id="wbTabSessions" type="button">Sessions</button>
+      <button class="tab" id="wbTabUsage" type="button">Claude &amp; usage</button>
+    </nav>
+    <button class="mini" id="wbClose" type="button">close</button>
+  </header>
+
+  <div class="wbbody">
+    <section id="wbProjects" class="wbpane">
+      <div class="rootbar">
+        <p id="wbRootLine" class="rootline">No projects folder picked yet.</p>
+        <div class="rootacts">
+          <button id="wbPickRoot" class="mini" type="button">choose folder</button>
+          <button id="wbUp" class="mini" type="button" hidden>go up</button>
+          <button id="wbNewFolder" class="mini" type="button" hidden>new folder</button>
+        </div>
+      </div>
+
+      <form id="wbNewFolderForm" class="inlineform" hidden>
+        <label for="wbNewName">Name the new folder
+          <input id="wbNewName" autocomplete="off" placeholder="e.g. client-dashboard" />
+        </label>
+        <label class="switch tight" for="wbNewGit">
+          <input id="wbNewGit" type="checkbox" checked />
+          <span>Start a git history in it</span>
+        </label>
+        <div class="inlineacts">
+          <button class="primary" type="submit">Create</button>
+          <button class="mini" type="button" id="wbNewCancel">cancel</button>
+        </div>
+        <p id="wbNewNote" class="formnote" hidden></p>
+      </form>
+
+      <div id="wbPick" class="picker" hidden>
+        <p class="pickhead">Walk to the folder that holds your projects, then say "use this one". This list only shows folders and only reaches inside your own home.</p>
+        <div class="pickbar">
+          <button class="mini" id="wbPickUp" type="button">one folder up</button>
+          <code id="wbPickPath" class="path">—</code>
+          <button class="primary use" id="wbPickUse" type="button">Use this folder</button>
+        </div>
+        <ul id="wbPickList" class="picklist"></ul>
+        <p id="wbPickNote" class="formnote" hidden></p>
+      </div>
+
+      <p id="wbCrumb" class="crumb" hidden></p>
+      <ul id="wbList" class="filelist"></ul>
+      <p id="wbEmptyList" class="empty" hidden>No folders in here yet.</p>
+
+      <div id="wbDetail" class="wbproj" hidden>
+        <div class="detailhead">
+          <h3 id="wbProjName">folder</h3>
+          <button class="mini" id="wbDetailClose" type="button">back to the list</button>
+        </div>
+        <dl id="wbProjFacts"></dl>
+        <p id="wbDirty" class="dirtyline" hidden></p>
+        <ul id="wbDirtyList" class="dirtylist" hidden></ul>
+
+        <div class="actions">
+          <button class="primary" id="wbWorkHere" type="button">Work in this folder</button>
+          <button class="mini" id="wbSeeSessions" type="button">see its sessions</button>
+          <p class="hint" id="wbWorkHint">This fills the folder into the ask form and puts your cursor in the box.</p>
+        </div>
+
+        <form id="wbNewBranch" class="branchform">
+          <h4>A new branch</h4>
+          <p class="hint">It names a new branch from the one you are on and stands on it. Anything you have already changed comes with you — nothing is thrown away.</p>
+          <label for="wbNewBranchName">Branch name
+            <input id="wbNewBranchName" autocomplete="off" placeholder="e.g. feature-dark-mode" />
+          </label>
+          <div class="inlineacts">
+            <button class="primary" type="submit">Create it and move onto it</button>
+          </div>
+        </form>
+
+        <form id="wbSwitch" class="branchform">
+          <h4>A branch that already exists</h4>
+          <p class="hint" id="wbSwitchHint">Pick a branch. If moving there would overwrite something you changed, it refuses and tells you what is uncommitted.</p>
+          <label for="wbSwitchName">Branch
+            <select id="wbSwitchName"></select>
+          </label>
+          <div class="inlineacts">
+            <button type="submit">Move onto it</button>
+          </div>
+        </form>
+
+        <p id="wbGitNote" class="formnote" hidden></p>
+      </div>
+    </section>
+
+    <section id="wbSessions" class="wbpane" hidden>
+      <div class="rootbar">
+        <p id="wbSessLine" class="rootline">Pick a project and this lists every Claude conversation it has ever had.</p>
+        <div class="rootacts">
+          <select id="wbSessProject" aria-label="Which project"></select>
+          <button class="mini" id="wbSessNew" type="button">new session</button>
+          <button class="mini" id="wbSessRefresh" type="button">read again</button>
+        </div>
+      </div>
+
+      <form id="wbSessForm" class="inlineform sessform" hidden>
+        <p id="wbSessHeading" class="formmode"></p>
+        <label for="wbSessPrompt">What to ask for
+          <textarea id="wbSessPrompt" rows="3" placeholder="e.g. Read the tests and tell me which ones would fail if I changed nothing else"></textarea>
+        </label>
+        <div class="promptbar">
+          <button class="mini" id="wbSessFileBtn" type="button">add a file to look at</button>
+          <span class="hintline" id="wbSessFileNote">each pick is written into your ask as @its-path</span>
+        </div>
+        <div class="row">
+          <label class="grow">Name this session
+            <input id="wbSessName" autocomplete="off" placeholder="optional — it shows on the office floor" />
+          </label>
+          <label>Most steps it may take
+            <input id="wbSessTurns" type="number" min="1" max="200" value="20" />
+          </label>
+        </div>
+        <div class="row">
+          <label class="grow">What it is allowed to do
+            <select id="wbSessAllow">
+              <option value="plan">only look — it changes nothing (safest)</option>
+              <option value="default">ask before it writes or runs something</option>
+              <option value="acceptEdits">may change files without asking</option>
+              <option value="bypassPermissions">may do anything without asking (risky)</option>
+            </select>
+          </label>
+        </div>
+        <label class="switch tight" for="wbSessApprove">
+          <input id="wbSessApprove" type="checkbox" />
+          <span>Ask me here before anything that writes or runs a command</span>
+        </label>
+        <label class="switch tight" for="wbSessClosePrev">
+          <input id="wbSessClosePrev" type="checkbox" checked />
+          <span>Close the session this page started here before starting this one</span>
+        </label>
+        <div class="inlineacts">
+          <button class="primary" type="submit" id="wbSessGo">Send it in</button>
+          <button class="mini" type="button" id="wbSessCancel">cancel</button>
+        </div>
+        <p id="wbSessNote" class="formnote" hidden></p>
+      </form>
+
+      <div id="wbFilePick" class="picker" hidden>
+        <p class="pickhead">Pick the files Claude should look at. Each one is written into your ask as <code>@its-path</code> — the page never reads what is inside them.</p>
+        <div class="pickbar">
+          <input id="wbFileQ" placeholder="filter by name…" autocomplete="off" />
+          <code id="wbFileFolder" class="path">—</code>
+          <button class="mini" id="wbFileClose" type="button">done</button>
+        </div>
+        <ul id="wbFileList" class="picklist"></ul>
+        <p id="wbFileNote" class="formnote" hidden></p>
+      </div>
+
+      <ul id="wbSessList" class="sesslist"></ul>
+      <p id="wbSessEmpty" class="empty" hidden>Nothing here yet.</p>
+      <p id="wbSessRead" class="hint" hidden></p>
+    </section>
+
+    <section id="wbUsage" class="wbpane" hidden>
+      <div class="rootbar">
+        <p id="wbUsageLine" class="rootline">Loading what Claude reports about itself…</p>
+        <div class="rootacts">
+          <button class="mini" id="wbUsageRefresh" type="button">ask Claude again</button>
+        </div>
+      </div>
+      <div id="wbUsageBody"></div>
+    </section>
+  </div>
+</div>
+
+<script type="module" src="./client.js"></script>
+<script type="module" src="./workbench.js"></script>
+</body>
+</html>
