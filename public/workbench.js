@@ -800,12 +800,12 @@ function renderUsage(d) {
   ]));
   const table = el('table', 'ledger');
   const head = el('tr');
-  head.append(el('th', null, 'session'), el('th', null, 'folder'), el('th', null, 'doing'), el('th.n', null, 'pid'), el('th.n', null, 'open for'));
+  head.append(el('th', null, 'session'), el('th', null, 'folder'), el('th', null, 'doing'), el('th.n', null, 'open for'));
   table.append(head);
   if (!live.rows.length) {
     const tr = el('tr');
     const td = el('td', null, 'Nothing is running.');
-    td.colSpan = 5;
+    td.colSpan = 4;
     tr.append(td);
     table.append(tr);
   }
@@ -815,7 +815,6 @@ function renderUsage(d) {
       el('td', null, r.name),
       el('td', null, r.folderName || '—'),
       el('td', null, r.onFloor ? `${r.status}, and it is on the office floor` : r.status),
-      el('td.n', null, r.pid ? String(r.pid) : '—'),
       el('td.n', null, r.startedAt ? ago(r.startedAt) : '—'),
     );
     table.append(tr);

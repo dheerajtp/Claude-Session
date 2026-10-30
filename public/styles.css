@@ -184,7 +184,6 @@ code { font-family: ui-monospace, monospace; font-size: 11px; color: var(--teal)
 .feed { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
 .feed li { padding: 7px 0 8px; border-bottom: 1px solid #ffffff08; }
 .feed .head { display: flex; align-items: baseline; gap: 8px; }
-.feed time { color: var(--dim); font: 600 10px/1.4 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 .feed .who { flex: 0 1 auto; color: var(--ink); font: 800 11px/1.4 ui-sans-serif, system-ui; overflow-wrap: anywhere; }
 .feed .t { display: block; margin: 3px 0 0; color: var(--muted); font: 500 13px/1.45 ui-sans-serif, system-ui; overflow-wrap: anywhere; }
 .feed li.error .t { color: var(--rose); }

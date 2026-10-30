@@ -292,6 +292,8 @@ const TAGS = /<\/?[a-zA-Z_][A-Za-z0-9_.:-]*(?:\s[^<>]{0,200})?\/?>/g;
 function readable(s) {
   return String(s == null ? '' : s)
     .replace(TAGS, ' ')
+    // A session id is a handle for the machine, never a fact for a person.
+    .replace(/\bsession\s+[0-9a-f]{6,}\b/gi, 'session')
     // A model's answer arrives in markdown. A person reads the words, not the asterisks.
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/(\*\*|__|~~|`)/g, '')
@@ -448,6 +450,15 @@ const FINISHED = {
 
 let finishedOpen = true;
 
+// A folder named after a session hash is still a handle, not a name to read.
+const SESSION_ID = /^[0-9a-f]{8,40}$/i;
+
+function humanName(item) {
+  if (item.name && !SESSION_ID.test(item.name)) return item.name;
+  if (item.folder && !SESSION_ID.test(item.folder)) return item.folder;
+  return 'a Claude session';
+}
+
 function renderFinished() {
   const items = shelf.items || [];
   $('finishedCount').textContent = String(items.length);
@@ -464,7 +475,7 @@ function finishedRow(item) {
   const head = el('div', 'who');
   const dot = el('span', 'wdot');
   dot.style.background = color;
-  head.append(dot, el('span', 'wname', item.name || 'an agent'));
+  head.append(dot, el('span', 'wname', humanName(item)));
   head.append(el('span', 'chip', label));
   li.append(head);
 
@@ -500,7 +511,7 @@ function finishedRow(item) {
 
 // Written the way you would say it to someone standing next to you.
 function finishedSentence(item) {
-  const where = item.folder ? `the ${readable(item.folder)} folder` : 'its folder';
+  const where = item.folder && !SESSION_ID.test(item.folder) ? `the ${readable(item.folder)} folder` : 'its folder';
   if (item.outcome === 'error') return `It stopped in ${where} after running into a problem.`;
   if (item.outcome === 'stopped') return `You stopped it while it was working in ${where}.`;
   if (item.outcome === 'quiet') return `It went quiet in ${where} and was tidied away.`;
@@ -659,8 +670,9 @@ function renderFeed() {
     const head = el('div', 'head');
     const who = el('b', 'who', f.agentName || 'system');
     if (f.color) who.style.color = f.color;
-    head.append(el('time', null, new Date(f.ts).toLocaleTimeString([], { hour12: false })), who);
-    // Row-wise: who and when on the first line, the plain sentence across the full width.
+    head.append(who);
+    // Who on the first line, the plain sentence across the full width. The feed is
+    // already in order, so a timestamp adds noise rather than information.
     li.append(head, el('p', 't', readable(f.text) || ''));
     return li;
   }));
@@ -688,14 +700,13 @@ function renderDetail(list) {
     ['money spent', a.costUsd ? `$${a.costUsd.toFixed(4)}` : '—'],
     ['its plan', a.todoTotal ? `${a.todoDone} of ${a.todoTotal} steps done` : 'it has not made one'],
     ['helpers it could call', a.hadAgents ? `${a.hadAgents} agents / ${a.hadSkills} skills / ${a.hadTools} tools` : '—'],
-    ['its id', a.sessionId ? a.sessionId.slice(0, 8) : '—'],
   ];
   const dl = $('detailStats');
   dl.replaceChildren(...stats.flatMap(([k, v]) => [el('dt', null, k), el('dd', null, String(v))]));
   dl.children[1].style.color = color;
   renderExtra(a);
   $('detailLog').textContent = (a.log || [])
-    .map((l) => `${new Date(l.ts).toLocaleTimeString([], { hour12: false })}  ${readable(l.human || l.text)}`)
+    .map((l) => readable(l.human || l.text))
     .join('\n') || 'nothing reported yet';
   $('detailLog').scrollTop = $('detailLog').scrollHeight;
 }
@@ -806,16 +817,15 @@ function renderExtra(a) {
   host.append(promptBlock(a));
 
   const cast = [
-    ...(a.skillsUsed || []).map((s) => ['skill', s.name, s.at, s.failed]),
-    ...(a.agentsUsed || []).map((s) => ['agent', s.name, s.at, false]),
+    ...(a.skillsUsed || []).map((s) => ['skill', s.name, s.failed]),
+    ...(a.agentsUsed || []).map((s) => ['agent', s.name, false]),
   ];
   if (cast.length) {
     host.append(el('div', 'subhead', 'CALLED IN'));
     const ul = el('ul', 'cast');
-    for (const [kind, name, at, failed] of cast.slice(-8).reverse()) {
+    for (const [kind, name, failed] of cast.slice(-8).reverse()) {
       const li = el('li');
-      li.append(el('span', `tagsrc ${kind}`, kind.toUpperCase()), el('b', null, name),
-        el('span', 'meta', ' ' + new Date(at).toLocaleTimeString([], { hour12: false })));
+      li.append(el('span', `tagsrc ${kind}`, kind.toUpperCase()), el('b', null, name));
       if (failed) li.append(el('span', 'fail', 'call failed'));
       ul.append(li);
     }

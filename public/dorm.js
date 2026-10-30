@@ -193,7 +193,7 @@ function walls(iso, ctx, inv) {
     ? 'run a job to fill the beds'
     : inv.source === 'installed'
       ? `installed on this computer · ${when}`
-      : `last seen ${when} · session ${String(inv.sessionId || '').slice(0, 8)}`;
+      : `last seen ${when}`;
   sign(iso, ctx, 'x', 7.7, DORM.w - 0.3, H - 44, from, 9);
 }
 
