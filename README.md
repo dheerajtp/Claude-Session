@@ -26,12 +26,15 @@ Requires Node 20+ and the `claude` CLI on PATH (or set `CLAUDE_BIN`). The server
 | Surface | What it shows |
 | --- | --- |
 | **Office floor** | Sessions that are running right now. One avatar per session, at a desk, with a speech bubble. |
-| **Dormitory** | The standby roster — every subagent and skill a session reported as available — sleeping in beds. A bed wakes up (`ON SHIFT`) when a session actually calls it. |
+| **Dormitory** | The standby roster — every subagent and skill available here — sleeping in beds. A bed wakes up (`ON SHIFT`) when a session actually calls it. |
 | **Workbench** (the `+`) | Your projects on disk, their branches, and what Claude reports about itself: who is signed in, which sessions are open, what this office measured. |
 
-The dorm is only populated after at least one real session reports its roster, because the
-list comes from the session's own `system/init` event rather than from scanning `~/.claude`.
-Scanning would pick up marketplace `.bak`/`.staging` copies the CLI never loads.
+The dorm is filled from the computer the office runs on. Before any session has spoken, it
+reads your own agents and skills (`~/.claude/agents`, `~/.claude/skills`) and this project's
+`.claude` folder — never a plugin marketplace's `.bak`/`.staging` copies, which the CLI does
+not load. The first real session to report its `system/init` roster replaces that scan with
+exactly what the session had available, and the cache in `data/inventory.json` stays on that
+machine.
 
 ---
 
@@ -199,8 +202,9 @@ thing saved, and every file changed since then. From there:
 - **New folder** — makes a directory inside the root, optionally with `git init -b main`.
 
 **Claude & usage.** `claude auth status --json` for who is signed in and on what plan,
-`claude agents --json` for every session open on this machine (pid, folder, idle or working,
-how long, and whether it is standing on the office floor), plus the totals this office
+`claude -p "/usage" --output-format json` for the account-wide plan limits Claude itself
+reports, `claude agents --json` for every session open on this machine (pid, folder, idle or
+working, how long, and whether it is standing on the office floor), plus the totals this office
 measured itself: finished runs, tokens, dollars, things done, time, and the per-tool and
 per-model ledgers.
 
@@ -277,7 +281,7 @@ Disable per-shell with `CLAUDE_OFFICE_DISABLED=1`, or point it elsewhere with
 | `/api/projects?path=` | GET | One level of the projects root (relative path), folders first |
 | `/api/project?path=` | GET | One folder's git detail: branch, branches, uncommitted files, last save |
 | `/api/browse?path=` | GET | Read-only folder walk, confined to your home; used only to choose the root |
-| `/api/usage` | GET | `claude auth status` + `claude agents` + this office's own totals (`?fresh=1` skips the cache) |
+| `/api/usage` | GET | `claude auth status` + `claude -p "/usage"` + `claude agents` + this office's own totals (`?fresh=1` skips the cache) |
 | `/api/projects/root` | POST | Choose the projects root |
 | `/api/projects/folder` | POST | Create a folder inside the root (`git: false` skips `git init`) |
 | `/api/project/branch` | POST | `{path, name, create}` — `git switch -c` / `git switch`; `409` with the uncommitted list if git refuses |
@@ -299,7 +303,7 @@ lib/asks.js            The approval desk: holds an armed PreToolUse, prints Clau
 lib/history.js         The Finished shelf, one row per session, persisted to data/history.json
 lib/inventory.js       Standby roster + usage ledger, cached to data/inventory.json
 lib/projects.js        Folder browser, project detail, and the create-and-switch branch actions
-lib/usage.js           claude auth status + claude agents + this office's own measured totals
+lib/usage.js           claude auth status + claude /usage + claude agents + this office's totals
 public/iso.js          Isometric projection maths (tile 128×64, depth-sorted painter)
 public/furniture.js    Desk, sofa, cooler, server rack, plants, boards
 public/world.js        Office scene, avatar walking/animation, speech bubbles
@@ -307,7 +311,7 @@ public/dorm.js         Dormitory scene, beds, nameplate layout pass
 public/client.js       SSE client, crew cards, approval cards, Finished shelf, activity stream
 public/workbench.js    The + button and the page behind it: projects, branches, session & usage
 public/styles.css      Layout and the two-column HUD
-data/settings.json     The projects root you picked — the only path this app remembers
+data/*.json            Machine-local, git-ignored: roster cache, Finished shelf, projects root
 hooks/                 The bridge script and its installer
 ```
 
@@ -333,9 +337,13 @@ reached they slide sideways into the margin instead of overlapping.
   `claude` CLI's own existing login and never reads, prints, or stores credentials.
 - **Invented activity.** If a session has not reported something, the office shows
   `no plan yet` rather than guessing at progress.
-- **A quota or usage-limit bar.** Claude Code publishes no endpoint for "62% of your weekly
-  limit used", so the workbench states its plan and its measured totals and leaves the limit
-  out, rather than drawing a gauge that would have to be invented.
+- **A tool count before a session reports one.** The installed roster is read from disk, which
+  knows agents and skills but not the tools a session will expose, so that number appears only
+  after a real session reports it.
+- **A locally estimated usage bar.** The plan-limit bars come from Claude Code's own
+  `/usage` report, which is account-wide and rounded, and are labelled as such. The office
+  never guesses a percentage from local token counts, and never reads a credential file —
+  the CLI answers using the login it already has.
 
 ---
 

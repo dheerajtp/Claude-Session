@@ -1,0 +1,7 @@
+# Machine-local state: written at runtime, never committed.
+data/inventory.json
+data/history.json
+data/settings.json
+
+# macOS
+.DS_Store

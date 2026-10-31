@@ -184,7 +184,6 @@ code { font-family: ui-monospace, monospace; font-size: 11px; color: var(--teal)
 .feed { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
 .feed li { padding: 7px 0 8px; border-bottom: 1px solid #ffffff08; }
 .feed .head { display: flex; align-items: baseline; gap: 8px; }
-.feed time { color: var(--dim); font: 600 10px/1.4 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 .feed .who { flex: 0 1 auto; color: var(--ink); font: 800 11px/1.4 ui-sans-serif, system-ui; overflow-wrap: anywhere; }
 .feed .t { display: block; margin: 3px 0 0; color: var(--muted); font: 500 13px/1.45 ui-sans-serif, system-ui; overflow-wrap: anywhere; }
 .feed li.error .t { color: var(--rose); }
@@ -417,6 +416,15 @@ button.route.armed { background: var(--teal); color: #04211b; border-color: var(
 .wbsec h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .wbsec p { margin: 0 0 6px; font-size: 13px; line-height: 1.55; color: var(--ink); max-width: 88ch; overflow-wrap: anywhere; }
 .wbsec p:nth-child(n+2) { color: var(--muted); }
+
+.limits { display: grid; gap: 10px; margin: 0 0 4px; }
+.limit { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #ffffff04; }
+.limittop { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 7px; }
+.limittop b { font-size: 12.5px; font-weight: 700; }
+.limittop span { color: var(--teal); font: 600 11px/1 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.limittrack { height: 6px; border-radius: 999px; background: #ffffff0d; overflow: hidden; }
+.limitfill { display: block; height: 100%; border-radius: 999px; background: var(--teal); transition: width .3s ease; }
+.limit .when { margin: 7px 0 0; color: var(--dim); font: 600 10.5px/1.4 ui-monospace, monospace; }
 
 /* ---- the sessions tab --------------------------------------------------------------- */
 /* A session row is a sentence first and a control strip second, so the ask gets the

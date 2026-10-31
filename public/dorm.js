@@ -183,12 +183,18 @@ function walls(iso, ctx, inv) {
   ctx.fill();
 
   const counts = inv?.known
-    ? `STANDBY · ${inv.counts.agents} agents · ${inv.counts.skills} skills · ${inv.counts.tools} tools`
-    : 'DORMITORY · NO SESSION RECORDED';
+    ? `STANDBY · ${inv.counts.agents} agents · ${inv.counts.skills} skills${inv.counts.tools ? ` · ${inv.counts.tools} tools` : ''}`
+    : 'DORMITORY · NO ROSTER YET';
   sign(iso, ctx, 'x', 0.5, 3.9, H - 44, counts, 11);
-  sign(iso, ctx, 'x', 7.7, DORM.w - 0.3, H - 44, inv?.known
-    ? `last seen ${new Date(inv.seenAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · session ${String(inv.sessionId || '').slice(0, 8)}`
-    : 'run a job to fill the beds', 9);
+  const when = inv?.known
+    ? new Date(inv.seenAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '';
+  const from = !inv?.known
+    ? 'run a job to fill the beds'
+    : inv.source === 'installed'
+      ? `installed on this computer · ${when}`
+      : `last seen ${when}`;
+  sign(iso, ctx, 'x', 7.7, DORM.w - 0.3, H - 44, from, 9);
 }
 
 function sign(iso, ctx, wall, from, to, gz, text, size) {
@@ -387,11 +393,11 @@ function emptySign(iso, ctx) {
   ctx.textAlign = 'center';
   ctx.fillStyle = alpha('#ff8fa3', 0.9);
   ctx.font = `700 ${Math.max(9, 15 * iso.z)}px ui-sans-serif, system-ui`;
-  ctx.fillText('NO CLAUDE SESSION RECORDED YET', c.x, c.y);
+  ctx.fillText('NO AGENTS OR SKILLS FOUND YET', c.x, c.y);
   ctx.fillStyle = alpha('#c9d6ea', 0.8);
   ctx.font = `500 ${Math.max(8, 11 * iso.z)}px ui-sans-serif, system-ui`;
-  ctx.fillText('Run an agent on the office floor: its session reports the agents and', c.x, c.y + 18 * iso.z);
-  ctx.fillText('skills it had available, and they are put to bed here.', c.x, c.y + 33 * iso.z);
+  ctx.fillText('The office reads ~/.claude and this project\'s .claude folder.', c.x, c.y + 18 * iso.z);
+  ctx.fillText('Start a Claude session and the ones it reports move in.', c.x, c.y + 33 * iso.z);
   ctx.textAlign = 'left';
 }
 

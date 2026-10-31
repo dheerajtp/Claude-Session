@@ -792,20 +792,44 @@ function renderUsage(d) {
   const host = $('wbUsageBody');
   host.replaceChildren();
 
+  if (d.plan && d.plan.limits.length) {
+    host.append(subhead('Plan limits'));
+    const grid = el('div', 'limits');
+    for (const l of d.plan.limits) {
+      const row = el('div', 'limit');
+      const top = el('div', 'limittop');
+      const left = el('span', null, `${l.remaining}% left`);
+      if (l.used >= 85) left.style.color = 'var(--rose)';
+      else if (l.used >= 60) left.style.color = 'var(--amber)';
+      top.append(el('b', null, l.label), left);
+      const track = el('div', 'limittrack');
+      const fill = el('i', 'limitfill');
+      fill.style.width = `${l.used}%`;
+      if (l.used >= 85) fill.style.background = 'var(--rose)';
+      else if (l.used >= 60) fill.style.background = 'var(--amber)';
+      track.append(fill);
+      row.append(top, track);
+      row.append(el('p', 'when', `${l.used}% used${l.resets ? ` · resets ${l.resets}` : ''}`));
+      grid.append(row);
+    }
+    host.append(grid);
+    host.append(el('p', 'hint', 'Reported by Claude Code for your whole account, not just this computer.'));
+  }
+
   const live = d.live || { rows: [], count: 0, idle: 0 };
   host.append(section('Running right now', [
     live.count
-      ? `${live.count} Claude ${live.count === 1 ? 'session is' : 'sessions are'} open on this machine${live.idle ? `, and ${live.idle} ${live.idle === 1 ? 'one is' : 'of them are'} waiting for you rather than working` : ''}.`
+      ? `${live.count} Claude ${live.count === 1 ? 'session is' : 'sessions are'} open on this machine${live.idle ? `, and ${live.idle === 1 ? 'one is' : `${live.idle} of them are`} waiting for you rather than working` : ''}.`
       : 'No Claude session is open on this machine right now.',
   ]));
   const table = el('table', 'ledger');
   const head = el('tr');
-  head.append(el('th', null, 'session'), el('th', null, 'folder'), el('th', null, 'doing'), el('th.n', null, 'pid'), el('th.n', null, 'open for'));
+  head.append(el('th', null, 'session'), el('th', null, 'folder'), el('th', null, 'doing'), el('th.n', null, 'open for'));
   table.append(head);
   if (!live.rows.length) {
     const tr = el('tr');
     const td = el('td', null, 'Nothing is running.');
-    td.colSpan = 5;
+    td.colSpan = 4;
     tr.append(td);
     table.append(tr);
   }
@@ -815,7 +839,6 @@ function renderUsage(d) {
       el('td', null, r.name),
       el('td', null, r.folderName || '—'),
       el('td', null, r.onFloor ? `${r.status}, and it is on the office floor` : r.status),
-      el('td.n', null, r.pid ? String(r.pid) : '—'),
       el('td.n', null, r.startedAt ? ago(r.startedAt) : '—'),
     );
     table.append(tr);
