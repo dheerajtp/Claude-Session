@@ -19,11 +19,14 @@
     </div>
     <div class="topright">
       <button id="needsYou" class="badge waiting" type="button" hidden>waiting on you</button>
+      <button id="alertsBtn" class="badge neutral clickable" type="button">Tell me when done</button>
       <div id="feedBadge" class="badge neutral">connecting…</div>
       <div id="conn" class="conn"><i></i><span>socket</span></div>
       <div class="clock" id="clock">--:--:--</div>
     </div>
   </header>
+
+  <div id="legendBar" class="legendbar" role="list" aria-label="What the colours mean"></div>
 
   <div id="banner" class="banner" hidden></div>
 
@@ -79,21 +82,20 @@
             <button id="fitBtn" title="refit camera (double-click canvas too)">Fit</button>
           </div>
         </div>
+        <p class="hint" id="crewHint">Every Claude session and helper on this computer. Click one to see its details.</p>
         <ul id="roster" class="roster"></ul>
+        <div id="setup" class="setup" hidden>
+          <p class="setup-head" id="setupHead">Sessions from VS Code and your terminal can't reach this office yet.</p>
+          <p class="setup-sub" id="setupSub">Connect them and a new session will walk in here.</p>
+          <button class="primary" type="button" id="setupBtn">Connect my sessions</button>
+          <p class="hint" id="setupDetails"></p>
+        </div>
         <p id="empty" class="empty">Nobody is in the room yet. Send an agent off to the right, or start one in VS Code or a terminal and it will walk in here.</p>
         <footer class="totals" id="totals"></footer>
       </section>
 
       <section class="card legend">
-        <h2>What the colours mean</h2>
-        <ul>
-          <li><i style="background:#4DE1C1"></i> working — it is doing something right now</li>
-          <li><i style="background:#FFD166"></i> thinking — it is deciding what to do next</li>
-          <li><i style="background:#8AB4FF"></i> walking in — it just arrived at a desk</li>
-          <li><i style="background:#FF8FA3"></i> needs you — it stopped and is waiting for an answer</li>
-          <li><i style="background:#7CE4A8"></i> finished — it wrote its report</li>
-          <li><i style="background:#9aa7b8"></i> on a break — no news for a while, so it wandered to the cooler</li>
-        </ul>
+        <h2>Reading the floor</h2>
         <p class="hint"><b>Sprinting</b> means it did three or more things in four seconds. The bar under each name shows how far through <b>its own plan</b> it is. An agent that never wrote a plan has no percentage, so its bar keeps moving instead of guessing.</p>
       </section>
     </aside>

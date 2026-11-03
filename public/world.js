@@ -582,15 +582,19 @@ class Avatar {
     ctx.textBaseline = 'top';
     ctx.font = '800 12px ui-sans-serif, system-ui';
     ctx.fillStyle = '#f2f6ff';
-    ctx.fillText(fit(agent.name, 23), x + pad, y + 9);
+    const innerW = w - pad * 2;
+    ctx.font = '700 9px ui-monospace, monospace';
+    const label = this.running ? 'SPRINTING' : (STATE_LABEL[agent.state] || 'IDLE');
+    const labelW = ctx.measureText(label).width;
+    ctx.font = '800 12px ui-sans-serif, system-ui';
+    ctx.fillText(fitPx(ctx, agent.name, innerW - labelW - 8), x + pad, y + 9);
     ctx.font = '700 9px ui-monospace, monospace';
     ctx.fillStyle = accent;
-    const label = this.running ? 'SPRINTING' : (STATE_LABEL[agent.state] || 'IDLE');
-    ctx.fillText(label, x + w - pad - ctx.measureText(label).width, y + 11);
+    ctx.fillText(label, x + w - pad - labelW, y + 11);
 
     ctx.font = '600 10px ui-sans-serif, system-ui';
     ctx.fillStyle = 'rgba(226,235,248,0.88)';
-    const said = wrapWords(agent.activity || 'no news yet', 40, 2);
+    const said = wrapPx(ctx, agent.activity || 'no news yet', innerW, 2);
     said.forEach((line, i) => ctx.fillText(line, x + pad, y + 27 + i * 11));
 
     let barY = y + 43 + Math.max(0, said.length - 1) * 11;
@@ -601,7 +605,7 @@ class Avatar {
       ctx.font = '700 8.5px ui-monospace, monospace';
       ctx.fillStyle = 'rgba(236,243,255,0.82)';
       const eta = estRemaining(agent);
-      ctx.fillText(`${Math.round(ratio * 100)}% of its plan${eta ? ` · about ${eta} left` : ''}`, x + pad, barY + 10);
+      ctx.fillText(fitPx(ctx, `${Math.round(ratio * 100)}% of its plan${eta ? ` · about ${eta} left` : ''}`, innerW), x + pad, barY + 10);
       barY += 22;
     } else {
       shimmer(ctx, x + pad, barY, w - pad * 2, 7, accent, t);
@@ -613,7 +617,7 @@ class Avatar {
     if (cast) {
       ctx.font = '700 8.5px ui-monospace, monospace';
       ctx.fillStyle = 'rgba(255,209,102,0.9)';
-      ctx.fillText(cast, x + pad, barY + 1);
+      ctx.fillText(fitPx(ctx, cast, innerW), x + pad, barY + 1);
       barY += 11;
     }
     ctx.font = '600 8.5px ui-monospace, monospace';
@@ -621,12 +625,50 @@ class Avatar {
     const tokens = (agent.tokensIn || 0) + (agent.tokensOut || 0);
     const took = agent.durationMs != null ? `${Math.round(agent.durationMs / 100) / 10}s` : '';
     const money = agent.costUsd ? `$${agent.costUsd.toFixed(4)}` : '';
-    ctx.fillText(`${shortModel(agent.model)} · ${agent.turns} ${agent.turns === 1 ? 'round' : 'rounds'} · ${agent.toolCalls} ${agent.toolCalls === 1 ? 'thing done' : 'things done'}`, x + pad, barY + 2);
+    ctx.fillText(fitPx(ctx, `${shortModel(agent.model)} · ${agent.turns} ${agent.turns === 1 ? 'round' : 'rounds'} · ${agent.toolCalls} ${agent.toolCalls === 1 ? 'thing done' : 'things done'}`, innerW), x + pad, barY + 2);
     ctx.fillStyle = 'rgba(198,212,235,0.6)';
     const usage = [tokens ? `${kfmt(tokens)} tokens` : '', money, took].filter(Boolean).join(' · ');
-    ctx.fillText(usage || 'nothing measured yet', x + pad, barY + 12);
+    ctx.fillText(fitPx(ctx, usage || 'nothing measured yet', innerW), x + pad, barY + 12);
     ctx.restore();
   }
+}
+
+// Pixel-true text fitting: character counts lie for proportional fonts and for long
+// unbroken paths, so every line in the bubble is measured with the font it is drawn in.
+function fitPx(ctx, text, maxW) {
+  const t = String(text || '');
+  if (ctx.measureText(t).width <= maxW) return t;
+  let lo = 0, hi = t.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(`${t.slice(0, mid).trimEnd()}…`).width <= maxW) lo = mid; else hi = mid - 1;
+  }
+  return `${t.slice(0, lo).trimEnd()}…`;
+}
+
+// Wrap on spaces, hard-break a single token that is wider than the box (a file path),
+// and end the last allowed line with an ellipsis if text remains.
+function wrapPx(ctx, text, maxW, max) {
+  const tokens = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  let i = 0;
+  while (i < tokens.length && lines.length < max) {
+    let tok = tokens[i];
+    const next = line ? `${line} ${tok}` : tok;
+    if (ctx.measureText(next).width <= maxW) { line = next; i++; continue; }
+    if (line) { lines.push(line); line = ''; continue; }
+    // one token wider than the box: take as many characters as fit
+    let n = tok.length;
+    while (n > 1 && ctx.measureText(tok.slice(0, n)).width > maxW) n--;
+    lines.push(tok.slice(0, n));
+    tokens[i] = tok.slice(n);
+    if (!tokens[i]) i++;
+  }
+  if (line && lines.length < max) lines.push(line);
+  const more = i < tokens.length || (line && lines.length >= max && lines[lines.length - 1] !== line);
+  if (more && lines.length) lines[lines.length - 1] = fitPx(ctx, `${lines[lines.length - 1]} …`, maxW);
+  return lines.slice(0, max);
 }
 
 function castLine(agent) {
@@ -642,25 +684,6 @@ function uniq(list) {
   const out = [];
   for (const x of list) if (x && !out.includes(x)) out.push(x);
   return out;
-}
-
-// Break on spaces, never inside a word, and stop at `max` lines with an ellipsis.
-function wrapWords(text, width, max) {
-  const words = String(text || '').split(/\s+/).filter(Boolean);
-  const lines = [];
-  let line = '';
-  for (const word of words) {
-    const next = line ? `${line} ${word}` : word;
-    if (next.length > width && line) {
-      lines.push(line);
-      line = word;
-      if (lines.length === max) { lines[max - 1] = `${lines[max - 1].slice(0, width - 1)}…`; return lines; }
-    } else {
-      line = next;
-    }
-  }
-  if (line) lines.push(line);
-  return lines.slice(0, max);
 }
 
 function shortModel(m) {
