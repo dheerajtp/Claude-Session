@@ -6,6 +6,7 @@
 //
 // Everything on screen is a sentence, and every number is one the server actually measured.
 
+import { mountPictures } from './pictures.js';
 const $ = (id) => document.getElementById(id);
 
 // Browsing the home folder is absolute paths; working inside the root is relative.
@@ -19,6 +20,7 @@ const state = {
   sessRel: null,
   sessResume: null,
   sess: null,
+  history: [],
 };
 
 let sheetTab = 'projects';
@@ -81,6 +83,7 @@ function openSheet(tab) {
   showTab(tab);
   if (tab === 'projects') loadList(state.rel);
   else if (tab === 'sessions') openSessionsTab();
+  else if (tab === 'history') loadHistory();
   else loadUsage(false);
 }
 
@@ -89,17 +92,19 @@ function closeSheet() {
 }
 
 function showTab(tab) {
-  for (const [id, which] of [['wbTabProjects', 'projects'], ['wbTabSessions', 'sessions'], ['wbTabUsage', 'usage']]) {
+  for (const [id, which] of [['wbTabProjects', 'projects'], ['wbTabSessions', 'sessions'], ['wbTabHistory', 'history'], ['wbTabUsage', 'usage']]) {
     $(id).classList.toggle('on', which === tab);
   }
   $('wbProjects').hidden = tab !== 'projects';
   $('wbSessions').hidden = tab !== 'sessions';
+  $('wbHistory').hidden = tab !== 'history';
   $('wbUsage').hidden = tab !== 'usage';
 }
 
 function wireTabs() {
   $('wbTabProjects').addEventListener('click', () => showTab(sheetTab = 'projects'));
   $('wbTabSessions').addEventListener('click', () => { showTab(sheetTab = 'sessions'); openSessionsTab(); });
+  $('wbTabHistory').addEventListener('click', () => { showTab(sheetTab = 'history'); loadHistory(); });
   $('wbTabUsage').addEventListener('click', () => { showTab(sheetTab = 'usage'); loadUsage(false); });
   $('wbClose').addEventListener('click', closeSheet);
   $('wbUsageRefresh').addEventListener('click', () => loadUsage(true));
@@ -666,13 +671,20 @@ function openLaunchForm(session) {
   $('wbSessPrompt').scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
+let sessPics = null;
+
 function closeLaunchForm() {
+  if (sessPics) sessPics.clear();
   $('wbSessForm').hidden = true;
   $('wbFilePick').hidden = true;
   state.sessResume = null;
 }
 
 function wireSessions() {
+  sessPics = mountPictures($('picsSess'), {
+    textarea: $('wbSessPrompt'),
+    onChange: (p) => { $('wbSessGo').disabled = p.busy(); },
+  });
   $('wbSessNew').addEventListener('click', () => openLaunchForm(null));
   $('wbSessCancel').addEventListener('click', closeLaunchForm);
   $('wbSessFileBtn').addEventListener('click', () => {
@@ -691,6 +703,7 @@ function wireSessions() {
     e.preventDefault();
     const prompt = $('wbSessPrompt').value.trim();
     if (!prompt) return note('wbSessNote', 'Type what to ask for first.');
+    if (sessPics.busy()) return;
     const btn = $('wbSessGo');
     btn.disabled = true;
     note('wbSessNote', state.sessResume ? 'Walking back in to that conversation…' : 'Sending it in…');
@@ -701,9 +714,9 @@ function wireSessions() {
         sessionId: state.sessResume || undefined,
         name: $('wbSessName').value.trim() || undefined,
         permissionMode: $('wbSessAllow').value,
-        maxTurns: Number($('wbSessTurns').value) || 20,
         approvalsHere: $('wbSessApprove').checked,
         closePrevious: !state.sessResume && $('wbSessClosePrev').checked,
+        images: sessPics.ids().length ? sessPics.ids() : undefined,
       });
       const name = out.state && out.state.name ? out.state.name : 'the new session';
       note('wbSessNote', `${name} is on the floor. ${out.closedPrevious ? `It closed the ${out.closedPrevious} ${out.closedPrevious === 1 ? 'session' : 'sessions'} this page had started here first — those conversations are kept, not deleted. ` : ''}Watch it at a desk, or read again below when it ends.`);
@@ -715,7 +728,7 @@ function wireSessions() {
     } catch (err) {
       note('wbSessNote', err.message);
     } finally {
-      btn.disabled = false;
+      btn.disabled = sessPics.busy();
     }
   });
 }
@@ -767,6 +780,149 @@ function countMentions() {
   $('wbSessFileNote').textContent = n
     ? `${n} file${n === 1 ? '' : 's'} in your ask. The page only writes the path — it never reads the file.`
     : 'each pick is written into your ask as @its-path';
+}
+
+// ---- history --------------------------------------------------------------------------
+
+const HIST_OUTCOMES = {
+  finished: 'finished the job',
+  closed: 'session closed',
+  error: 'stopped with a problem',
+  stopped: 'you stopped it',
+  quiet: 'went quiet',
+};
+
+// Pure: filter, then pinned first and newest first within each group.
+function filterHistory(items, { q, outcome, folder, pinnedOnly } = {}) {
+  const needle = String(q || '').trim().toLowerCase();
+  const out = (items || []).filter((i) => {
+    if (outcome && i.outcome !== outcome) return false;
+    if (folder && i.folder !== folder) return false;
+    if (pinnedOnly && !i.pinned) return false;
+    if (!needle) return true;
+    return [i.name, i.folder, i.ask, i.prompt, i.report].some((v) => String(v || '').toLowerCase().includes(needle));
+  });
+  return out.sort((a, b) => (Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))) || ((b.finishedAt || 0) - (a.finishedAt || 0)));
+}
+
+async function loadHistory() {
+  $('wbHistLine').textContent = 'Reading the finished runs…';
+  let d;
+  try {
+    d = await api('/api/history/all');
+  } catch (err) {
+    $('wbHistLine').textContent = err.message;
+    return;
+  }
+  state.history = Array.isArray(d.items) ? d.items : [];
+  const n = state.history.length;
+  $('wbHistLine').textContent = n ? `${n} finished ${n === 1 ? 'run' : 'runs'}` : 'Nothing has finished yet.';
+  const sel = $('wbHistFolder');
+  const keep = sel.value;
+  const folders = [...new Set(state.history.map((i) => i.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  sel.replaceChildren(new Option('All folders', ''), ...folders.map((f) => new Option(f, f)));
+  sel.value = folders.includes(keep) ? keep : '';
+  renderHistory();
+}
+
+function renderHistory() {
+  const rows = filterHistory(state.history, {
+    q: $('wbHistSearch').value,
+    outcome: $('wbHistOutcome').value,
+    folder: $('wbHistFolder').value,
+    pinnedOnly: $('wbHistPinned').checked,
+  });
+  const ul = $('wbHistList');
+  ul.replaceChildren(...rows.map(histCard));
+  const empty = $('wbHistEmpty');
+  empty.hidden = rows.length > 0;
+  empty.textContent = state.history.length
+    ? 'Nothing matches. Clear the search or the filters.'
+    : 'Nothing has finished yet. Runs show up here after they finish.';
+}
+
+function clipText(s, n) {
+  const t = String(s || '').replace(/\s+/g, ' ').trim();
+  return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
+}
+
+function histFacts(i) {
+  const bits = [when(i.finishedAt)];
+  if (i.durationMs) bits.push(`took ${spoken(i.durationMs)}`);
+  if (i.toolCalls) bits.push(`${i.toolCalls} ${i.toolCalls === 1 ? 'thing done' : 'things done'}`);
+  if (i.costUsd) bits.push(`$${Number(i.costUsd).toFixed(2)}`);
+  if (i.tokens) bits.push(`${fmt(i.tokens)} tokens`);
+  return bits.join(' · ');
+}
+
+function histCard(i) {
+  const li = el('li', 'sessitem');
+  const head = el('div', 'sesshead');
+  head.append(el('span', 'sesschip', HIST_OUTCOMES[i.outcome] || i.outcome || 'finished'));
+  const title = el('div', 'histtitle');
+  title.append(el('strong', null, i.name || 'claude'));
+  if (i.folder) title.append(el('span', 'histfolder', i.folder));
+  head.append(title);
+  li.append(head);
+  if (i.ask) li.append(el('div', 'sesslast', `You asked: ${clipText(i.ask, 160)}`));
+  if (i.report) li.append(el('div', 'sessreport', clipText(i.report, 220)));
+  li.append(el('div', 'sessmeta', histFacts(i)));
+
+  const acts = el('div', 'sessacts');
+  const pin = el('button', 'mini');
+  pin.type = 'button';
+  pin.textContent = i.pinned ? 'Unpin' : 'Pin';
+  pin.addEventListener('click', async () => {
+    pin.disabled = true;
+    try {
+      await post('/api/history/pin', { key: i.key, pinned: !i.pinned });
+      await loadHistory();
+    } catch (err) {
+      $('wbHistLine').textContent = err.message;
+      pin.disabled = false;
+    }
+  });
+  const follow = el('button', 'mini');
+  follow.type = 'button';
+  follow.textContent = 'Follow up';
+  const again = el('button', 'mini');
+  again.type = 'button';
+  again.textContent = 'Run again';
+  const outside = 'This folder is outside your projects folder.';
+  if (!i.canFollowUp) {
+    follow.disabled = true;
+    follow.title = i.rel == null ? outside : 'This session did not report an id, so it cannot be carried on.';
+  }
+  if (!i.canRunAgain) {
+    again.disabled = true;
+    again.title = i.rel == null ? outside : 'This run has no recorded request to repeat.';
+  }
+  follow.addEventListener('click', async () => {
+    state.sessRel = i.rel;
+    showTab(sheetTab = 'sessions');
+    await loadSessions(i.rel);
+    openLaunchForm({ id: i.sessionId, label: i.name });
+  });
+  again.addEventListener('click', async () => {
+    state.sessRel = i.rel;
+    showTab(sheetTab = 'sessions');
+    await loadSessions(i.rel);
+    openLaunchForm(null);
+    $('wbSessPrompt').value = i.ask;
+  });
+  acts.append(pin, follow, again);
+  li.append(acts);
+  return li;
+}
+
+function wireHistory() {
+  let timer = null;
+  $('wbHistSearch').addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(renderHistory, 150);
+  });
+  for (const id of ['wbHistOutcome', 'wbHistFolder', 'wbHistPinned']) $(id).addEventListener('change', renderHistory);
+  $('wbHistRefresh').addEventListener('click', loadHistory);
 }
 
 // ---- usage ----------------------------------------------------------------------------
@@ -968,4 +1124,5 @@ wireFab();
 wireTabs();
 wireForms();
 wireSessions();
+wireHistory();
 loadList('');

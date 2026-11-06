@@ -47,7 +47,7 @@ There are two independent paths, and both write to the same in-memory `Room`.
 `POST /api/run` spawns the CLI directly:
 
 ```
-claude -p <prompt> --output-format stream-json --verbose --max-turns N --permission-mode <mode> [--model X]
+claude -p <prompt> --output-format stream-json --verbose --permission-mode <mode> [--model X]
 ```
 
 [lib/claude-runner.js](lib/claude-runner.js) parses the NDJSON stream and maps each message

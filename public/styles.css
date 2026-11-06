@@ -99,6 +99,7 @@ textarea { font-family: ui-monospace, monospace; font-size: 12.5px; }
 input, select { text-transform: none; letter-spacing: 0; font-weight: 500; }
 textarea:focus, input:focus, select:focus { outline: 2px solid #4de1c155; border-color: #4de1c1; }
 .row { display: flex; gap: 9px; }
+.fieldnote { display: block; margin-top: 5px; font: 400 11px/1.45 system-ui, sans-serif; letter-spacing: 0; text-transform: none; color: var(--dim); }
 .grow2, .row label.grow { flex: 1; }
 
 button {
@@ -111,6 +112,8 @@ button:hover { background: #26324f; transform: translateY(-1px); }
 button.primary { width: 100%; background: linear-gradient(180deg, #4de1c1, #2fbfa3); color: #04211b; border-color: #57f0d0; font-size: 13px; padding: 11px; }
 button.primary:hover { filter: brightness(1.07); }
 button.primary:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+button.accent { background: linear-gradient(180deg, #4de1c1, #2fbfa3); color: #04211b; border-color: #57f0d0; }
+button.accent:hover { filter: brightness(1.07); }
 button.mini { padding: 5px 9px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
 button.stop { background: #3a1d28; border-color: #ff5e7a55; color: #ffc2cd; }
 button.on { background: var(--amber); color: #3a2200; border-color: var(--amber); }
@@ -193,8 +196,9 @@ code { font-family: ui-monospace, monospace; font-size: 11px; color: var(--teal)
 .feed li.todo .t { color: var(--amber); }
 .feed li.say .t { color: var(--ink); font-style: italic; }
 
-.promptbar { display: flex; align-items: center; gap: 9px; margin: -2px 0 10px; }
+.promptbar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: -2px 0 10px; }
 .hintline { font: 600 10.5px/1.4 ui-monospace, monospace; color: var(--dim); }
+.promptbar .hintline { font: 11px/1.45 system-ui, sans-serif; letter-spacing: 0; text-transform: none; flex-basis: 100%; }
 .adv { margin: 4px 0 10px; border: 1px dashed var(--line); border-radius: 9px; padding: 7px 9px; }
 .adv summary { font: 700 10.5px/1 ui-monospace, monospace; letter-spacing: .07em; color: var(--dim); cursor: pointer; text-transform: uppercase; }
 .adv[open] summary { color: var(--muted); margin-bottom: 8px; }
@@ -371,7 +375,13 @@ button.armswitch[aria-checked="true"] > i::after { transform: translateX(14px); 
 
 .rootbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .rootline { flex: 1 1 320px; margin: 0; font-size: 13px; color: var(--ink); overflow-wrap: anywhere; line-height: 1.5; }
-.rootacts { display: flex; gap: 6px; flex: none; }
+.rootacts { display: flex; gap: 6px; flex: none; align-items: center; }
+.rootacts button.mini { text-transform: none; letter-spacing: 0; font-size: 13px; white-space: nowrap; min-height: 40px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; }
+.rootacts select { min-height: 40px; margin-top: 0; }
+@media (max-width: 600px) {
+  .rootacts { flex-wrap: wrap; width: 100%; }
+  .rootacts select { flex: 1 1 100%; }
+}
 
 .inlineform, .branchform, .picker {
   border: 1px solid var(--line); border-radius: var(--r); background: var(--card);
@@ -495,4 +505,17 @@ button.mini:disabled { opacity: .5; cursor: default; }
 .qthumb img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; display: block; }
 .qthumb .qx { position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; padding: 0; line-height: 14px; border: 0; border-radius: 50%; background: #000a; color: #fff; cursor: pointer; font-size: 12px; }
 .qthumb .qname { display: block; max-height: 2.4em; overflow: hidden; }
+#picsRun, #picsSess { margin: -2px 0 10px; }
 .qerr { margin: 0; color: #FF5E7A; font-size: 11.5px; }
+
+/* history pane */
+.histctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.histctl input[type="search"] { flex: 1 1 260px; min-width: 0; min-height: 40px; margin: 0; }
+.histctl select { flex: 0 1 200px; min-width: 0; min-height: 40px; margin: 0; }
+.histpin { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.histtitle { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; overflow-wrap: anywhere; }
+.histfolder { font-size: 11.5px; color: var(--dim); }
+@media (max-width: 600px) {
+  .histctl { flex-direction: column; align-items: stretch; }
+  .histctl input[type="search"], .histctl select { flex: 0 0 auto; width: 100%; }
+}

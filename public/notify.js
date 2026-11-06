@@ -6,12 +6,38 @@ const KEY = 'office.alerts';
 let on = false;
 let audio = null;
 let flashTimer = null;
-let baseTitle = document.title;
+let baseTitle = typeof document === 'undefined' ? '' : document.title;
+const SEEN = 'office.seen';
+const SIX_HOURS = 6 * 60 * 60 * 1000;
+const announcedAsks = new Set();
 
 try { on = localStorage.getItem(KEY) === '1'; } catch { /* private window */ }
 
+if (on) armUnlock();
+
 export const alertsOn = () => on;
-export const canNotify = () => 'Notification' in window;
+export const canNotify = () => typeof window !== 'undefined' && 'Notification' in window;
+
+export function popupState() {
+  if (!canNotify() || typeof Notification === 'undefined') return 'unsupported';
+  return Notification.permission;
+}
+
+// Creates/resumes the chime and asks for pop-up permission. Needs a user gesture to work.
+export async function unlockAlerts() {
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); await audio.resume(); } catch { /* silent is fine */ }
+  let permission = popupState();
+  if (permission === 'default') {
+    try { permission = await Notification.requestPermission(); } catch { permission = 'denied'; }
+  }
+  return { permission };
+}
+
+function armUnlock() {
+  if (typeof document === 'undefined' || !document.addEventListener) return;
+  const once = () => { unlockAlerts(); };
+  for (const type of ['pointerdown', 'keydown']) document.addEventListener(type, once, { once: true, capture: true });
+}
 
 export async function setAlerts(next) {
   on = next;
@@ -43,7 +69,7 @@ function chime() {
 }
 
 function flashTitle(text) {
-  if (!document.hidden) return;
+  if (typeof document === 'undefined' || !document.hidden) return;
   clearInterval(flashTimer);
   baseTitle = baseTitle || document.title;
   let flip = false;
@@ -65,10 +91,18 @@ export function alert(title, body, { kind = 'ok', say } = {}) {
   chime();
   flashTitle(`${kind === 'bad' ? '⚠' : '✅'} ${title}`);
   if (say) say(`${title} — ${body}`, kind === 'bad' ? 'bad' : 'ok');
-  if (canNotify() && Notification.permission === 'granted' && (document.hidden || !document.hasFocus())) {
+  if (canNotify() && Notification.permission === 'granted' && (document.hidden || !document.hasFocus?.())) {
     try { new Notification(title, { body, tag: `office-${title}`, silent: true }); } catch { /* ignore */ }
   }
 }
+
+const readSeen = () => { try { return Number(localStorage.getItem(SEEN)) || null; } catch { return null; } };
+const writeSeen = (ms) => {
+  try {
+    const cur = Number(localStorage.getItem(SEEN)) || 0;
+    if (ms > cur) localStorage.setItem(SEEN, String(ms));
+  } catch { /* ignore */ }
+};
 
 const took = (ms) => {
   if (ms == null) return '';
@@ -78,6 +112,7 @@ const took = (ms) => {
 
 // A finished run, as the Finished shelf stores it.
 export function announceFinished(item, say) {
+  if (item?.finishedAt) writeSeen(item.finishedAt);
   if (!item || item.outcome === 'stopped') return; // the person stopped it themselves
   const what = item.folder || item.name || 'a session';
   const bits = [
@@ -90,6 +125,7 @@ export function announceFinished(item, say) {
 }
 
 export function announceNeedsYou(say, ask) {
+  if (ask?.id != null) announcedAsks.add(ask.id);
   const first = ask?.kind === 'question' ? ask.questions?.[0]?.question : '';
   if (first) {
     let q = String(first).trim();
@@ -97,4 +133,27 @@ export function announceNeedsYou(say, ask) {
     return alert(`Claude asks: ${q}`, 'Answer it on the Agent Office page.', { kind: 'bad', say });
   }
   alert('Claude needs your answer', 'It is waiting on you in the office.', { kind: 'bad', say });
+}
+
+// On (re)connect: tell the person about anything that finished or asked while the page was away.
+export function catchUp({ history, asks } = {}, say) {
+  if (!on) return;
+  const now = Date.now();
+  const seen = readSeen();
+  if (seen == null) {
+    try { localStorage.setItem(SEEN, String(now)); } catch { /* ignore */ }
+  } else {
+    const missed = (history?.items || []).filter((i) =>
+      i && i.finishedAt > seen && i.outcome !== 'stopped' && i.finishedAt >= now - SIX_HOURS);
+    if (missed.length === 1) announceFinished(missed[0], say);
+    else if (missed.length > 1) {
+      alert(`${missed.length} sessions finished while you were away`, 'Open the Finished shelf to read them.', { say });
+    }
+    if (missed.length) writeSeen(Math.max(...missed.map((i) => i.finishedAt)));
+  }
+  for (const ask of asks?.open || []) {
+    if (ask.kind !== 'question' || announcedAsks.has(ask.id)) continue;
+    announcedAsks.add(ask.id);
+    announceNeedsYou(say, ask);
+  }
 }

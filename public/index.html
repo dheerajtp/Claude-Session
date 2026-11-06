@@ -38,16 +38,15 @@
           <label for="prompt">What to ask for
             <textarea id="prompt" rows="4" placeholder="e.g. Read this repo and tell me, in five bullets, how signing in works"></textarea>
           </label>
+          <div id="picsRun"></div>
           <div class="promptbar">
-            <button type="button" class="mini" id="sharpenBtn">Make my ask clearer</button>
-            <span class="hintline" id="sharpenNote">what you want · how far to go · what the answer looks like</span>
+            <button type="button" class="mini" id="sharpenBtn" title="Claude rewrites what you typed into a fuller request. Nothing is run and your original is kept so you can undo it.">Rewrite my request</button>
+            <span class="hintline" id="sharpenNote">Claude rewrites what you typed so the agent knows the goal, what to touch, and what answer to give. You can undo it.</span>
           </div>
           <div class="row">
             <label class="grow">Model
-              <input id="model" placeholder="default model" autocomplete="off" />
-            </label>
-            <label>Most steps it may take
-              <input id="turns" type="number" min="1" max="200" value="20" />
+              <input id="model" placeholder="Leave empty to use your default model" autocomplete="off" />
+              <span class="fieldnote">Which Claude does the work, e.g. sonnet or opus.</span>
             </label>
           </div>
           <div class="row">
@@ -176,6 +175,7 @@
     <nav class="wbtabs">
       <button class="tab on" id="wbTabProjects" type="button">Projects</button>
       <button class="tab" id="wbTabSessions" type="button">Sessions</button>
+      <button class="tab" id="wbTabHistory" type="button">History</button>
       <button class="tab" id="wbTabUsage" type="button">Claude &amp; usage</button>
     </nav>
     <button class="mini" id="wbClose" type="button">close</button>
@@ -268,8 +268,8 @@
         <p id="wbSessLine" class="rootline">Pick a project and this lists every Claude conversation it has ever had.</p>
         <div class="rootacts">
           <select id="wbSessProject" aria-label="Which project"></select>
-          <button class="mini" id="wbSessNew" type="button">new session</button>
-          <button class="mini" id="wbSessRefresh" type="button">read again</button>
+          <button class="mini accent" id="wbSessNew" type="button" title="Start a fresh Claude conversation in the selected project">New session</button>
+          <button class="mini" id="wbSessRefresh" type="button" title="Read the list of conversations again">Refresh</button>
         </div>
       </div>
 
@@ -278,6 +278,7 @@
         <label for="wbSessPrompt">What to ask for
           <textarea id="wbSessPrompt" rows="3" placeholder="e.g. Read the tests and tell me which ones would fail if I changed nothing else"></textarea>
         </label>
+        <div id="picsSess"></div>
         <div class="promptbar">
           <button class="mini" id="wbSessFileBtn" type="button">add a file to look at</button>
           <span class="hintline" id="wbSessFileNote">each pick is written into your ask as @its-path</span>
@@ -285,9 +286,6 @@
         <div class="row">
           <label class="grow">Name this session
             <input id="wbSessName" autocomplete="off" placeholder="optional — it shows on the office floor" />
-          </label>
-          <label>Most steps it may take
-            <input id="wbSessTurns" type="number" min="1" max="200" value="20" />
           </label>
         </div>
         <div class="row">
@@ -329,6 +327,30 @@
       <ul id="wbSessList" class="sesslist"></ul>
       <p id="wbSessEmpty" class="empty" hidden>Nothing here yet.</p>
       <p id="wbSessRead" class="hint" hidden></p>
+    </section>
+
+    <section id="wbHistory" class="wbpane" hidden>
+      <div class="rootbar">
+        <p id="wbHistLine" class="rootline">Reading the finished runs…</p>
+        <div class="rootacts">
+          <button class="mini" id="wbHistRefresh" type="button">Refresh</button>
+        </div>
+      </div>
+      <div class="histctl">
+        <input id="wbHistSearch" type="search" placeholder="Search what you asked or what it did" aria-label="Search finished runs" autocomplete="off">
+        <select id="wbHistOutcome" aria-label="Filter by outcome">
+          <option value="">All outcomes</option>
+          <option value="finished">Finished the job</option>
+          <option value="error">Stopped with a problem</option>
+          <option value="quiet">Went quiet</option>
+          <option value="closed">Session closed</option>
+          <option value="stopped">You stopped it</option>
+        </select>
+        <select id="wbHistFolder" aria-label="Filter by folder"><option value="">All folders</option></select>
+        <label class="histpin"><input id="wbHistPinned" type="checkbox"> Pinned only</label>
+      </div>
+      <ul id="wbHistList" class="sesslist"></ul>
+      <p id="wbHistEmpty" class="empty" hidden></p>
     </section>
 
     <section id="wbUsage" class="wbpane" hidden>

@@ -11,7 +11,7 @@ import { handleHook, reapStaleHooks, noteDismissal, hookStats } from './lib/hook
 import { Inventory } from './lib/inventory.js';
 import { History } from './lib/history.js';
 import { Asks } from './lib/asks.js';
-import { Images } from './lib/images.js';
+import { Images, composePrompt } from './lib/images.js';
 import { Projects } from './lib/projects.js';
 import { Usage } from './lib/usage.js';
 import { Sessions } from './lib/sessions.js';
@@ -227,6 +227,15 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/inventory') return send(res, 200, room.inventory.snapshot());
     if (p === '/api/history') return send(res, 200, room.history.snapshot());
+    if (p === '/api/history/all') {
+      const all = room.history.snapshot(Infinity);
+      const items = all.items.map((item) => {
+        const where = projects.insideRoot(item.cwd || '');
+        const rel = where.error ? null : where.rel;
+        return { ...item, rel, canFollowUp: Boolean(item.sessionId && rel !== null), canRunAgain: Boolean(item.ask && rel !== null) };
+      });
+      return send(res, 200, { items, count: all.count });
+    }
 
     // Where your projects live, and what one folder looks like from the inside.
     if (p === '/api/projects') {
@@ -304,15 +313,16 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req);
         const prompt = String(body.prompt || '').trim();
         if (!prompt) return send(res, 400, { error: 'prompt required' });
+        const composed = composePrompt(prompt, body.images, images);
+        if (composed.error) return send(res, 400, { error: composed.error });
         if (!health.claude.found) {
           return send(res, 503, { error: `Claude CLI (${CLAUDE_BIN}) not found on PATH`, hint: 'install it or set CLAUDE_BIN' });
         }
         const run = new ClaudeRun(room, {
-          prompt,
+          prompt: composed.prompt,
           bin: health.claude.path || CLAUDE_BIN,
           model: body.model || null,
           permissionMode: body.permissionMode || 'plan',
-          maxTurns: body.maxTurns || 25,
           allowedTools: body.allowedTools || null,
           cwd: body.cwd ? path.resolve(String(body.cwd)) : process.cwd(),
           name: body.name || null,
@@ -330,6 +340,13 @@ const server = http.createServer(async (req, res) => {
         const stopped = run.stop();
         if (stopped) setTimeout(() => runs.delete(run.id), 6000);
         return send(res, 200, { stopped });
+      }
+
+      if (p === '/api/history/pin') {
+        const body = await readBody(req);
+        if (typeof body.key !== 'string') return send(res, 400, { error: 'key must be a string' });
+        if (!room.history.setPinned(body.key, Boolean(body.pinned))) return send(res, 404, { error: 'that run is not in the history' });
+        return send(res, 200, { ok: true });
       }
 
       if (p === '/api/dismiss') {
@@ -362,6 +379,14 @@ const server = http.createServer(async (req, res) => {
         const saved = images.save(ask.id, Buffer.from(body.data, 'base64'));
         if (saved.error) return send(res, 400, { error: saved.error });
         (ask.imageIds ||= []).push(saved.imageId);
+        return send(res, 200, { ok: true, imageId: saved.imageId, name: String(body.name || 'picture').slice(0, 80), bytes: saved.bytes });
+      }
+
+      if (p === '/api/prompt-image') {
+        const body = await readBody(req, 8 * 1024 * 1024);
+        if (typeof body.data !== 'string' || body.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(body.data)) return send(res, 400, { error: 'that picture could not be read' });
+        const saved = images.save('draft', Buffer.from(body.data, 'base64'));
+        if (saved.error) return send(res, 400, { error: saved.error });
         return send(res, 200, { ok: true, imageId: saved.imageId, name: String(body.name || 'picture').slice(0, 80), bytes: saved.bytes });
       }
 
@@ -455,6 +480,8 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req);
         const prompt = String(body.prompt || '').trim();
         if (!prompt) return send(res, 400, { error: 'the session needs something to be asked to do' });
+        const composed = composePrompt(prompt, body.images, images);
+        if (composed.error) return send(res, 400, { error: composed.error });
         if (!health.claude.found) return send(res, 503, { error: `Claude CLI (${CLAUDE_BIN}) not found on PATH` });
         const where = projects.insideRoot(body.path || '');
         if (where.error) return send(res, 400, where);
@@ -476,11 +503,10 @@ const server = http.createServer(async (req, res) => {
           }
         }
         const run = new ClaudeRun(room, {
-          prompt,
+          prompt: composed.prompt,
           bin: health.claude.path || CLAUDE_BIN,
           model: body.model || null,
           permissionMode: body.permissionMode || 'plan',
-          maxTurns: body.maxTurns || 25,
           cwd: where.path,
           sessionName: body.name || null,
           resume,
@@ -525,7 +551,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 405, { error: 'method not allowed' });
   } catch (err) {
     if (err.message === 'payload too large') {
-      const msg = p === '/api/ask-image' ? 'that picture is too big (5 MB at most)' : 'that request is too big';
+      const msg = (p === '/api/ask-image' || p === '/api/prompt-image') ? 'that picture is too big (5 MB at most)' : 'that request is too big';
       return send(res, 413, { error: msg }, { Connection: 'close' });
     }
     return send(res, 400, { error: err.message });
@@ -539,7 +565,7 @@ server.listen(PORT, HOST, () => {
 });
 
 // Hooked sessions that vanish without a SessionEnd must still leave the floor.
-setInterval(() => reapStaleHooks(room, { history: room.history, asks }), 15_000).unref();
+setInterval(() => reapStaleHooks(room, { history: room.history, asks }), 5_000).unref();
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {

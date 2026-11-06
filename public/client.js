@@ -1,7 +1,8 @@
+import { mountPictures } from './pictures.js';
 import { Office } from './world.js';
 import { renderLegend } from './legend.js';
 import { Dorm } from './dorm.js';
-import { alertsOn, setAlerts, canNotify, announceFinished, announceNeedsYou } from './notify.js';
+import { alertsOn, setAlerts, canNotify, announceFinished, announceNeedsYou, catchUp, popupState } from './notify.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -100,6 +101,8 @@ async function init() {
   setInterval(() => { $('clock').textContent = new Date().toLocaleTimeString(); }, 1000);
 }
 
+let popupNoted = false;
+
 function connect() {
   const es = new EventSource('/api/stream');
   es.onopen = () => setConn('live');
@@ -113,6 +116,13 @@ function connect() {
       if (msg.inventory) setInventory(msg.inventory);
       if (msg.asks) setAsks(msg.asks);
       if (msg.history) setShelf(msg.history);
+      catchUp({ history: msg.history, asks: msg.asks }, banner);
+      if (alertsOn() && popupState() !== 'granted' && !popupNoted) {
+        popupNoted = true;
+        banner(popupState() === 'default'
+          ? 'Alerts are on. Click anywhere on the page once to let your browser show pop-ups too.'
+          : 'Alerts are on, but your browser is blocking pop-ups. You will still hear a chime and see the tab title change. Allow notifications for this site in your browser settings to get pop-ups.');
+      }
       resync();
       return;
     }
@@ -197,27 +207,32 @@ function pushFeed(ev, silent) {
 }
 
 function wire() {
+  const pics = mountPictures($('picsRun'), {
+    textarea: $('prompt'),
+    onChange: (p) => { $('runBtn').disabled = p.busy() || !health || !health.claude.found; },
+  });
   $('runForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = {
       prompt: $('prompt').value.trim(),
       model: $('model').value.trim() || null,
       permissionMode: $('mode').value,
-      maxTurns: Number($('turns').value) || 20,
       cwd: $('cwd').value.trim() || undefined,
       approvalsHere: $('approveHere').checked,
     };
     if (!payload.prompt) return;
+    if (pics.busy()) return;
+    if (pics.ids().length) payload.images = pics.ids();
     $('runBtn').disabled = true;
     try {
       const r = await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) banner(`Run rejected: ${j.error || r.status}`, 'bad');
-      else { $('banner').hidden = true; $('prompt').value = ''; }
+      else { $('banner').hidden = true; $('prompt').value = ''; pics.clear(); }
     } catch (err) {
       banner(`Run failed: ${err.message}`, 'bad');
     } finally {
-      $('runBtn').disabled = !health || !health.claude.found;
+      $('runBtn').disabled = pics.busy() || !health || !health.claude.found;
     }
   });
 
@@ -230,6 +245,14 @@ function wire() {
 
   $('fitBtn').addEventListener('click', () => { activeIso().autoFit = true; activeIso().fit(); });
   $('sharpenBtn').addEventListener('click', sharpenComposer);
+  $('prompt').addEventListener('input', () => {
+    const box = $('prompt');
+    if ($('sharpenBtn').disabled) return;
+    if (box.dataset.sharpened && box.value.trim() !== box.dataset.sharpened) {
+      box.dataset.sharpened = '';
+      setRewriteUi('idle');
+    }
+  });
   window.addEventListener('hashchange', () => showRoom(location.hash === '#dorm' ? 'dorm' : 'office'));
   $('detailClose').addEventListener('click', () => { selected = null; office.selected = null; markDirty(); });
   const alertsBtn = $('alertsBtn');
@@ -278,32 +301,43 @@ async function sharpenPrompt(promptText, cwd) {
   return j.improved;
 }
 
+const REWRITE_IDLE = 'Claude rewrites what you typed so the agent knows the goal, what to touch, and what answer to give. You can undo it.';
+
+function setRewriteUi(state, detail) {
+  const btn = $('sharpenBtn');
+  const note = $('sharpenNote');
+  const ui = {
+    idle: ['Rewrite my request', false, REWRITE_IDLE],
+    empty: ['Rewrite my request', false, 'Type what you want first, then click this.'],
+    working: ['Rewriting…', true, 'Claude is rewriting your request. It only reads, nothing is changed.'],
+    done: ['Undo rewrite', false, 'Rewritten by Claude. Edit it freely, or click Undo rewrite to get your own words back.'],
+    undone: ['Rewrite my request', false, 'Back to your own words.'],
+    error: ['Rewrite my request', false, `Could not rewrite it: ${detail}. Your text is unchanged.`],
+  }[state];
+  btn.textContent = ui[0];
+  btn.disabled = ui[1];
+  note.textContent = ui[2];
+}
+
 async function sharpenComposer() {
   const box = $('prompt');
-  const note = $('sharpenNote');
-  const btn = $('sharpenBtn');
   const current = box.value.trim();
-  if (!current) { note.textContent = 'write a prompt first'; return; }
+  if (!current) { setRewriteUi('empty'); return; }
   if (box.dataset.sharpened === current) {
     box.value = box.dataset.original || current;
     box.dataset.sharpened = '';
-    note.textContent = 'back to your wording';
+    setRewriteUi('undone');
     return;
   }
-  btn.disabled = true;
-  btn.textContent = 'Sharpening…';
-  note.textContent = 'asking claude to tighten it (read-only, one turn)';
+  setRewriteUi('working');
   try {
     const improved = await sharpenPrompt(current, $('cwd').value.trim() || undefined);
     box.dataset.original = current;
     box.dataset.sharpened = improved;
     box.value = improved;
-    note.textContent = 'rewritten — click Sharpen again to undo, or edit it';
+    setRewriteUi('done');
   } catch (err) {
-    note.textContent = err.message;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Sharpen prompt';
+    setRewriteUi('error', err.message);
   }
 }
 
